@@ -18,7 +18,7 @@
 //
 //               MSP430G2xx3
 //            -----------------
-//        /|¥|              XIN|-
+//        /|\|              XIN|-
 //         | |                 | 32kHz
 //         --|RST          XOUT|-
 //           |                 |
@@ -47,7 +47,7 @@
 //P2.2=torque capture
 //
 //you need ANT NETWORK_ID at ANTAP1_AssignNetwork()
-//visit this is transient com and make free acount! 
+//visit this is transient com and make free acount!
 //goloveski
 //******************************************************************************
 
@@ -77,7 +77,7 @@
 //------------------------------------------------------------------------------
 unsigned int txData;                        // UART internal variable for TX
 unsigned char rxBuffer;                     // Received UART character
-const char string1[] = { "Hello World¥r¥n" };
+const char string1[] = { "Hello World\r\n" };
 unsigned int i;
 
 //------------------------------------------------------------------------------
@@ -114,14 +114,12 @@ void Timer1_A_period_init(void);
 
 //Crank Torque Frequency data define
 #define ctf_time_stamp   0x0580   //
-#define ctf_torque_ticks   0x0420   //
-
+#define ctf_torque_ticks 0x0420   //
 
 typedef uint8_t uchar;
-uchar	txBuffer[32];
-uint8_t	txBufferSize;
-uint8_t	txBufferPos;
-
+uchar txBuffer[32];
+uint8_t txBufferSize;
+uint8_t txBufferPos;
 
 unsigned int new_cap=0;
 unsigned int old_cap=0;
@@ -130,48 +128,55 @@ unsigned int cap_diff=0;
 unsigned int diff_array[16];                // RAM array for differences
 unsigned int capture_array[16];             // RAM array for captures
 unsigned int index=0;
-unsigned char count = 0;
+unsigned int count = 0;
 
 unsigned int new_pulse=0;
 unsigned int old_pulse=0;
 unsigned int pulse_diff=0;
 unsigned int PulseTicket=0;
+unsigned int PulseTicket_carry=0;
 unsigned int PulseTicket_array[16];             // RAM array for PulseTicket
-unsigned int PulseTicket_diff_array[16];             // RAM array for PulseTicket
+unsigned int PulseTicket_diff_array[16];        // RAM array for PulseTicket
 
 uint16_t ctf_time_stamp1;
 uint16_t ctf_torque_ticks1;
 uint8_t Rotation_event_counter;
 
-int unqomode = 1;         // for mode changer 1=CTM mode 2=OFFSET mode
+enum{
+	CTMMODE = 1,
+	OFFSETMODE
+};
+
+int unqomode = CTMMODE;         // for mode changer 1=CTM mode 2=OFFSET mode
+
 
 //------------------------------------------------------------------------------
 //  TX: sync+data+sum+CR+LF
 //------------------------------------------------------------------------------
 
-void txMessage(uchar*	message, uint8_t	messageSize)
+void txMessage(uchar* message,uint8_t messageSize)
 {
   uint8_t i;
   _BIC_SR(GIE);  // disable interrupt
 
-	txBufferPos		= 0;							   // set position to 0
-	txBufferSize	= messageSize + 3;	 // message plus syc, size and checksum
-	txBuffer[0]		= 0xa4;							 // sync byte
-	txBuffer[1]		= (uchar) messageSize - 1;		// message size - command size (1)
+        txBufferPos  = 0;                                                           // set position to 0
+        txBufferSize = messageSize + 3;         // message plus syc, size and checksum
+        txBuffer[0]  = 0xa4;                                                         // sync byte
+        txBuffer[1]  = (uchar) messageSize - 1;                // message size - command size (1)
 
   for(i=0; i<messageSize; i++)
     txBuffer[2+i] = message[i];
 
-	// calculate the checksum
+        // calculate the checksum
        txBuffer[txBufferSize - 1] = 0; //add
-	for(i=0; i<txBufferSize - 1; ++i)
-		txBuffer[txBufferSize - 1] = txBuffer[txBufferSize - 1] ^ txBuffer[i];
+        for(i=0; i<txBufferSize - 1; ++i)
+                txBuffer[txBufferSize - 1] = txBuffer[txBufferSize - 1] ^ txBuffer[i];
 
    _BIS_SR(GIE);   // enable interrupt
 
   // now send via UART
   for(i=0; i<txBufferSize; i++)
-	  TimerA_UART_tx(txBuffer[i]);
+          TimerA_UART_tx(txBuffer[i]);
 }
 
 //------------------------------------------------------------------------------
@@ -181,76 +186,76 @@ void txMessage(uchar*	message, uint8_t	messageSize)
 // Resets module
 void reset()
 {
-	uchar setup[2];
-	setup[0] = 0x4a; // ID Byte
-	setup[1] = 0x00; // Data Byte N (N=LENGTH)
-	txMessage(setup, 2);
+        uchar setup[2];
+        setup[0] = 0x4a; // ID Byte
+        setup[1] = 0x00; // Data Byte N (N=LENGTH)
+        txMessage(setup, 2);
 }
 
 
 void ANTAP1_AssignNetwork()
 {
-	uchar setup[10];
+        uchar setup[10];
 
     setup[0] = MESG_NETWORK_KEY_ID;
     setup[1] = ANT_CH_ID; // chan
-    setup[2] = 0xXX; //NETWORK_KEY_ID
-    setup[3] = 0xXX;
-    setup[4] = 0xXX;
-    setup[5] = 0xXX;
-    setup[6] = 0xXX;
-    setup[7] = 0xXX;
-    setup[8] = 0xXX;
-    setup[9] = 0xXX;
-	txMessage(setup, 10);
+    setup[2] = 0x00; //NETWORK_KEY_ID
+    setup[3] = 0x00;
+    setup[4] = 0x00;
+    setup[5] = 0x00;
+    setup[6] = 0x00;
+    setup[7] = 0x00;
+    setup[8] = 0x00;
+    setup[9] = 0x00;
+        txMessage(setup, 10);
 }
 
 
 // Assigns CH=0, CH Type=10(TX), Net#=0
 void assignch()
 {
-	uchar setup[4];
-	setup[0] = 0x42;
-	setup[1] = ANT_CH_ID;    // Channel ID
-	setup[2] = ANT_CH_TYPE;  // CH Type
-	setup[3] = ANT_NET_ID;   // Network ID
-	txMessage(setup, 4);
+        uchar setup[4];
+        setup[0] = 0x42;
+        setup[1] = ANT_CH_ID;    // Channel ID
+        setup[2] = ANT_CH_TYPE;  // CH Type
+        setup[3] = ANT_NET_ID;   // Network ID
+        txMessage(setup, 4);
 }
 
 // set RF frequency
 void setrf()
 {
-	uchar setup[3];
-	setup[0] = 0x45;
-    //setup[1] = (ANT_CH_FREQ & 0xFF00) >> 8;
-	//setup[2] = (ANT_CH_FREQ & 0xFF);    // RF Frequency
-	setup[1] = ANT_CH_ID;    // Channel ID
-	setup[2] = 0x39;    // RF Frequency
-	txMessage(setup, 3);
+        uchar setup[3];
+        setup[0] = 0x45;
+        //setup[1] = (ANT_CH_FREQ & 0xFF00) >> 8;
+        //setup[2] = (ANT_CH_FREQ & 0xFF);    // RF Frequency
+        setup[1] = ANT_CH_ID;    // Channel ID
+        setup[2] = 0x39;    // RF Frequency
+        txMessage(setup, 3);
 }
 
 // set channel period
 void setchperiod()
 {
-	uchar setup[4];
-	setup[0] = 0x43;
-	setup[1] = ANT_CH_ID;
-    setup[2] = (ANT_CH_PER & 0xFF);  //Channel Period LSB
-	setup[3] = ((ANT_CH_PER & 0xFF00) >> 8);   // Channel Period MSB
-	txMessage(setup, 4);
+        uchar setup[4];
+        setup[0] = 0x43;
+        setup[1] = ANT_CH_ID;
+        setup[2] = (ANT_CH_PER & 0xFF);  //Channel Period LSB
+        setup[3] = ((ANT_CH_PER & 0xFF00) >> 8);   // Channel Period MSB
+        txMessage(setup, 4);
 }
 
 // Assigns CH#, Device#=0000, Device Type ID=00, Trans Type=00
 void setchid()
 {
-	uchar setup[6];
-	setup[0] = 0x51;
-	setup[1] = ANT_CH_ID;      // Channel Number, 0x00 for HRM
-	setup[2] = ANT_DEV_ID1;    // Device Number LSB
-	setup[3] = ANT_DEV_ID2;    // Device Number MSB
-	setup[4] = ANT_DEV_TYPE;   // Device Type, 0x78 for HRM
-	setup[5] = ANT_TX_TYPE;
-	txMessage(setup, 6);
+        uchar setup[6];
+        setup[0] = 0x51;
+        setup[1] = ANT_CH_ID;      // Channel Number, 0x00 for HRM
+        setup[2] = ANT_DEV_ID1;    // Device Number LSB
+        setup[3] = ANT_DEV_ID2;    // Device Number MSB
+        setup[4] = ANT_DEV_TYPE;   // Device Type, 0x78 for HRM
+        setup[5] = ANT_TX_TYPE;
+        txMessage(setup, 6);
 }
 
 /////////////////////////////////////////////////////////////////////////
@@ -265,93 +270,101 @@ void setchid()
 /*
 void ChannelPower()
 {
-	uchar setup[3];
-	setup[0] = 0x47;
-	setup[1] = 0x00;
-	setup[2] = 0x03;
+        uchar setup[3];
+        setup[0] = 0x47;
+        setup[1] = 0x00;
+        setup[2] = 0x03;
 
 
-	txMessage(setup, 3);
+        txMessage(setup, 3);
 }
 */
 
 // Opens CH 0
 void opench()
 {
-	uchar setup[2];
-	setup[0] = 0x4b;
-	setup[1] = ANT_CH_ID;
-	txMessage(setup, 2);
+        uchar setup[2];
+        setup[0] = 0x4b;
+        setup[1] = ANT_CH_ID;
+        txMessage(setup, 2);
 }
 
 
 // Sends sendPower_n
 void sendPower_n(uchar num)
 {
-	uchar setup[10];
-	setup[0] = 0x4e;     //broadcast data
-	setup[1] = ANT_CH_ID;     //
-	setup[2] = 0x10;     // 0x10 Data Page Number
-	setup[3] = num;      //Event Count max256
-	setup[4] = 0xB8;     //Pedal Power 0xFF > pedal power not used
-	setup[5] = 0x5F;     //Instantaneous Cadence 0x5A=90
-	setup[6] =  (0xFF & (Power_data * num ));     //Accumulated Power LSB
-	setup[7] = ((0xFF00 & (Power_data * num)) >>8);     //Accumulated Power MSB
-	setup[8] = (0xFF & Power_data);      //Instantaneous Power LSB
-	setup[9] = ((0xFF00 & Power_data) >>8);       //Instantaneous Power MSB
-	txMessage(setup, 10);
+        uchar setup[10];
+        setup[0] = 0x4e;     //broadcast data
+        setup[1] = ANT_CH_ID;     //
+        setup[2] = 0x10;     // 0x10 Data Page Number
+        setup[3] = num;      //Event Count max256
+        setup[4] = 0xB8;     //Pedal Power 0xFF > pedal power not used
+        setup[5] = 0x5F;     //Instantaneous Cadence 0x5A=90
+        setup[6] =  (0xFF & (Power_data * num ));     //Accumulated Power LSB
+        setup[7] = ((0xFF00 & (Power_data * num)) >>8);     //Accumulated Power MSB
+        setup[8] = (0xFF & Power_data);      //Instantaneous Power LSB
+        setup[9] = ((0xFF00 & Power_data) >>8);       //Instantaneous Power MSB
+        txMessage(setup, 10);
 }
 
 // Sends sendPower_SCT
 void sendPower_SCT(uchar num)
 {
-	uchar setup[10];
-	setup[0] = 0x4e;     //broadcast data
-	setup[1] = ANT_CH_ID;     // 0x41;     //
-	setup[2] = 0x12;     // 0x12 Data Page Number Standard Crank Torque
-	setup[3] = num;      //Event Count max 256
-	setup[4] = num;     // Crank Revolutions
-	setup[5] = 0xFF;     //Crank cadence  if available 0x5A=90 Otherwise: 0xFF
-	setup[6] =  (0xFF & (crank_period * num ));     //Accumulated crank period LSB
-	setup[7] = ((0xFF00 & (crank_period * num)) >>8);     //Accumulated crank period MSB
-	setup[8] = (0xFF & crank_torque* num);      //Accumulated torque LSB
-	setup[9] = ((0xFF00 & crank_torque* num) >>8);       //Accumulated torque MSB
-	txMessage(setup, 10);
+        uchar setup[10];
+        setup[0] = 0x4e;									//broadcast data
+        setup[1] = ANT_CH_ID;								// 0x41;     //
+        setup[2] = 0x12;									// 0x12 Data Page Number Standard Crank Torque
+        setup[3] = num;										//Event Count max 256
+        setup[4] = num;										// Crank Revolutions
+        setup[5] = 0xFF;									//Crank cadence  if available 0x5A=90 Otherwise: 0xFF
+        setup[6] =  (0xFF & (crank_period * num ));			//Accumulated crank period LSB
+        setup[7] = ((0xFF00 & (crank_period * num)) >>8);	//Accumulated crank period MSB
+        setup[8] = (0xFF & crank_torque* num);				//Accumulated torque LSB
+        setup[9] = ((0xFF00 & crank_torque* num) >>8);		//Accumulated torque MSB
+        txMessage(setup, 10);
 }
 
 
 // Sends sendPower_CTF1
 void sendPower_CTF1()
 {
-	uchar setup[10];
-	setup[0] = 0x4e;     //broadcast data
-	setup[1] = ANT_CH_ID;     // 0x41;     //
-	setup[2] = 0x20;     // 0x20 Data Page Number Crank Torque Frequency
-	setup[3] = Rotation_event_counter;      //Rotation event counter increments with each completed pedal revolution.
-	setup[4] = 0x32;     // Slope MSB 1/10 Nm/Hz
-	setup[5] = 0x32;     // Slope LSB 1/10 Nm/Hz
-	setup[6] = ((0xFF00 & (ctf_time_stamp1)) >>8);      //Accumulated Time Stamp MSB 1/2000s
-	setup[7] = (0xFF & (ctf_time_stamp1));     //Accumulated Time Stamp LSB 1/2000s
-	setup[8] = ((0xFF00 & ctf_torque_ticks1) >>8);     //Accumulated Torque Ticks Stamp MSB
-	setup[9] = (0xFF & ctf_torque_ticks1);        //Accumulated Torque Ticks Stamp LSB
-	txMessage(setup, 10);
+        uchar setup[10];
+        setup[0] = 0x4e;									//broadcast data
+        setup[1] = ANT_CH_ID;								// 0x41;     //
+        setup[2] = 0x20;									// 0x20 Data Page Number Crank Torque Frequency
+        setup[3] = Rotation_event_counter;					//Rotation event counter increments with each completed pedal revolution.
+        setup[4] = 0x32;									// Slope MSB 1/10 Nm/Hz
+        setup[5] = 0x32;									// Slope LSB 1/10 Nm/Hz
+        setup[6] = ((0xFF00 & (ctf_time_stamp1)) >>8);      //Accumulated Time Stamp MSB 1/2000s
+        setup[7] = (0xFF & (ctf_time_stamp1));				//Accumulated Time Stamp LSB 1/2000s
+        setup[8] = ((0xFF00 & ctf_torque_ticks1) >>8);		//Accumulated Torque Ticks Stamp MSB
+        setup[9] = (0xFF & ctf_torque_ticks1);				//Accumulated Torque Ticks Stamp LSB
+        txMessage(setup, 10);
 }
 
 // Sends sendPower_CTF1_Calibration
 void sendPower_CTF1_CAL()
 {
-	uchar setup[10];
-	setup[0] = 0x4e;      //broadcast data
-	setup[1] = ANT_CH_ID;     // 0x41;     //
-	setup[2] = 0x01;      // Data page Number : Calibration massage
-	setup[3] = 0x10;      // Calibration ID : CTF defined massage
-	setup[4] = 0x01;      // CTF Defined ID : Zero offset
-	setup[5] = 0xFF;      // Reserved :
-	setup[6] = 0xFF;      // Reserved :
-	setup[7] = 0xFF;      // Reserved :
-	setup[8] = ((0xFF00 & ctf_torque_ticks1) >>8);     //Offset MSB
-	setup[9] = (0xFF & ctf_torque_ticks1);        //Offset LSB
-	txMessage(setup, 10);
+        uchar setup[10];
+        setup[0] = 0x4e;      //broadcast data
+        setup[1] = ANT_CH_ID; // 0x41;     //
+        setup[2] = 0x01;      // Data page Number : Calibration massage
+        setup[3] = 0x10;      // Calibration ID : CTF defined massage
+        setup[4] = 0x01;      // CTF Defined ID : Zero offset
+        setup[5] = 0xFF;      // Reserved :
+        setup[6] = 0xFF;      // Reserved :
+        setup[7] = 0xFF;      // Reserved :
+        setup[8] = ((0xFF00 & ctf_torque_ticks1) >>8);     //Offset MSB
+        setup[9] = (0xFF & ctf_torque_ticks1);        //Offset LSB
+        txMessage(setup, 10);
+}
+
+unsigned int calc_time_diff(int end_t,int start_t)
+{
+	if(end_t >= start_t)
+		return((unsigned int)(end_t - start_t));
+	else
+		return((unsigned int)((0xffff - start_t) + 1 + end_t));
 }
 
 
@@ -406,12 +419,10 @@ void main(void)
     P2IES |= BIT2;                // H -> L edge
     P2IE  |= BIT2;                // enable interrupt
 
-
-
     PulseTicket = 0x00;
 
-
     __enable_interrupt();
+
     TimerA_UART_init();                     // Start Timer_A UART
 
     Timer1_A_period_init();
@@ -482,36 +493,33 @@ void main(void)
 #pragma vector=PORT1_VECTOR
 __interrupt void Port_1(void)
 {
-	//P1OUT ^= BIT6;   // LED Toggle P1.6 using exclusive-OR
-	P1OUT ^= BIT0;   // LED Toggle P1.0 using exclusive-OR
+    //P1OUT ^= BIT6;   // LED Toggle P1.6 using exclusive-OR
+    P1OUT ^= BIT0;   // LED Toggle P1.0 using exclusive-OR
+    P1IFG &= ~BIT3;   // clear flag
 
-	P1IFG &= ~BIT3;   // clear flag
+	/*need chattering timer?*/
 
-	if (unqomode == 2) {
+    if(unqomode >= OFFSETMODE)
+		unqomode = CTMMODE;
+    else
+        unqomode = OFFSETMODE;
 
-		unqomode = 0;
-	    }
-
-	unqomode = unqomode + 1;
-
-	switch(unqomode)
-	  {
-
-	    case  1: Timer1_A_period_init();	   	        // Timer set CTM mode
-	   	         _NOP();                                // SET BREAKPOINT HERE
-	   	         //P1OUT = BIT1;
-	   	         //__delay_cycles(5000);                  // Delay between comm cycles
-	   	         //P1OUT &= ~BIT1;
-	             break;
-
-	    case  2: Timer1_A_period_CAL_init();            // Timer set CAL mode
-	             _NOP();                                // SET BREAKPOINT HERE
-	   	         //P1OUT = BIT1;
-	   	         // __delay_cycles(5000);                  // Delay between comm cycles
-	   	         //P1OUT &= ~BIT1;
-                break;
-
-	  }
+    if(unqomode == CTMMODE)
+    {
+		Timer1_A_period_init();                // Timer set CTM mode
+        _NOP();      			               // SET BREAKPOINT HERE
+        //P1OUT = BIT1;
+        //__delay_cycles(5000);                // Delay between comm cycles
+        //P1OUT &= ~BIT1;
+	}
+	else
+	{
+		Timer1_A_period_CAL_init();            // Timer set CAL mode
+		_NOP();                                // SET BREAKPOINT HERE
+        //P1OUT = BIT1;
+        // __delay_cycles(5000);                  // Delay between comm cycles
+        //P1OUT &= ~BIT1;
+    }
 }
 
 //------------------------------------------------------------------------------
@@ -520,119 +528,104 @@ __interrupt void Port_1(void)
 #pragma vector=PORT2_VECTOR
 __interrupt void Port_2(void)
 {
-//P1OUT ^= BIT6;   // LED Toggle P1.6 using exclusive-OR
-P2IFG &= ~BIT2;   // clear flag
+	//P1OUT ^= BIT6;   // LED Toggle P1.6 using exclusive-OR
+	P2IFG &= ~BIT2;   // clear flag
 
-PulseTicket++;    //Counter
+	if (PulseTicket >= 0xFFFF)
+	{
+		PulseTicket = 0;
+		PulseTicket_carry++;
+	}
+	else
+		PulseTicket++;    //Counter
 
-if (PulseTicket == 65535)
-{
-	PulseTicket = 0;
-}
- _NOP();
-
-
+	 _NOP();
 }
 
 //------------------------------------------------------------------------------
 // Timer_A cadence capture P2.0
 //------------------------------------------------------------------------------
 #pragma vector=TIMER1_A0_VECTOR
- __interrupt void TIMER1_A0(void)
+__interrupt void TIMER1_A0(void)
 {
     Rotation_event_counter++;
 
-    new_pulse = PulseTicket; //
-    ctf_torque_ticks1 = PulseTicket;
-    pulse_diff = new_pulse - old_pulse;
-    PulseTicket_diff_array[index] = pulse_diff;
-    PulseTicket_array[index] = new_pulse;
+    ctf_torque_ticks1 = new_pulse = PulseTicket;
 
-    switch(unqomode)
-    	  {
+	PulseTicket = 0;									// added for reset
 
-    	    case  1:
-    	    	//P1OUT |= BIT6;                           //LED ON
-    	    	P1OUT ^= BIT6;                         // Toggle P1.6 using exclusive-OR
-    	    	new_cap = TA1CCR0;                        //TIMER_A0->TIMER1_A0, TACCR0->TA1CCR0
-                     ctf_time_stamp1 = TA1CCR0/2;
-                     cap_diff = new_cap - old_cap;
-                     diff_array[index] = cap_diff;            // record difference to RAM array
-                     capture_array[index++] = new_cap;
-                     sendPower_CTF1();
-    	    	     _NOP();                                // SET BREAKPOINT HERE
-    	    	     break;
+	pulse_diff = new_pulse - old_pulse;
+	PulseTicket_diff_array[index] = (int)pulse_diff;
+//	PulseTicket_array[index] = new_pulse;
 
+    if(unqomode == CTMMODE)
+    {
+         P1OUT ^= BIT6;                         // Toggle P1.6 using exclusive-OR
+         new_cap = TA1CCR0;                     // TIMER_A0->TIMER1_A0, TACCR0->TA1CCR0
+         ctf_time_stamp1 = (TA1CCR0 / 2);
+         cap_diff = calc_time_diff(new_cap,old_cap);
+         diff_array[index] = cap_diff;          // record difference to RAM array
+//       capture_array[index++] = new_cap;
+         sendPower_CTF1();
+         _NOP();                                // SET BREAKPOINT HERE
+    }
+    else										//OFFSETMODE
+    {
+         P1OUT &= ~BIT6;                        //LED OFF
+         sendPower_CTF1_CAL();
+         _NOP();                                // SET BREAKPOINT HERE
+    }
 
-
-    	    case  2:
-    	    	    P1OUT &= ~BIT6;                           //LED OFF
-    	    	    sendPower_CTF1_CAL();
-    	             _NOP();                                // SET BREAKPOINT HERE
-                     break;
-    	  }
-
-   PulseTicket = 0; // added for reset
-
-   if (index == 16)
+   if(index >= 16)
    {
      index = 0;
      //P1OUT ^= BIT0;                         // Toggle P1.0 using exclusive-OR
    }
 
    old_pulse = new_pulse;
-//   old_cap = new_cap;                       // store this capture value
+   old_cap = new_cap;                       // store this capture value
+
    count ++;
-   if (count == 16) //32->16
+
+   if (count >= 16) //32->16
    {
-     count = 0;
-     _NOP();                                // SET BREAKPOINT HERE
-   }
-   if (Rotation_event_counter == 0xFF)
-   {
-   	Rotation_event_counter = 0x00;
+		count = 0;
+		_NOP();                                // SET BREAKPOINT HERE
    }
 
-
+   if(Rotation_event_counter >= 0xFF)
+   {
+		Rotation_event_counter = 0x00;
+   }
 }
 
- //------------------------------------------------------------------------------
- // Function configures Timer1_A for CTM period capture
- //------------------------------------------------------------------------------
- void Timer1_A_period_init(void)
- {
- 	TA1CCTL0 = CM_1 + SCS + CCIS_0 + CAP + CCIE; // Rising edge + Timer1_A3.CCI0A (P2.0)
- 	                                            // + Capture Mode + Interrupt
 
- 	//  TACTL = TASSEL_2 + MC_2;                  // SMCLK + Continuous Mode
- 	TA1CTL = TASSEL_1 + MC_2;                  // ACLK + Continuous Mode
-
-
+//------------------------------------------------------------------------------
+// Function configures Timer1_A for CTM period capture
+//------------------------------------------------------------------------------
+void Timer1_A_period_init(void)
+{
+	TA1CCTL0 = CM_1 + SCS + CCIS_0 + CAP + CCIE; // Rising edge + Timer1_A3.CCI0A (P2.0)
+                                                     // + Capture Mode + Interrupt
+//	TACTL = TASSEL_2 + MC_2;                  // SMCLK + Continuous Mode
+	TA1CTL = TASSEL_1 + MC_2;                  // ACLK + Continuous Mode
  }
 
 
  //------------------------------------------------------------------------------
  // Function configures Timer1_A for cal period capture
  //------------------------------------------------------------------------------
- void Timer1_A_period_CAL_init(void)
- {
-     // TA1CCTL0 = CM_1 + SCS + CCIS_0 + CAP + CCIE; // Rising edge + Timer1_A3.CCI0A (P2.0)
- 	                                            // + Capture Mode + Interrupt
+void Timer1_A_period_CAL_init(void)
+{
+//	TA1CCTL0 = CM_1 + SCS + CCIS_0 + CAP + CCIE; // Rising edge + Timer1_A3.CCI0A (P2.0)
+                                                     // + Capture Mode + Interrupt
 
-
- 	//  TACTL = TASSEL_2 + MC_2;                  // SMCLK + Continuous Mode
- 	//  TA1CTL = TASSEL_1 + MC_2;                  // ACLK + Continuous Mode
- 	TA1CTL = TASSEL_1 + MC_1; // + TAIE;           // ACLK, UP mode, interrupt
- 	TA1CCR0 = kPeriod;
- 	TA1CCTL0 |= CCIE;              // enable interrupt
-
-
-
- }
-
-
-
-
+//	TACTL = TASSEL_2 + MC_2;                  // SMCLK + Continuous Mode
+//	TA1CTL = TASSEL_1 + MC_2;                  // ACLK + Continuous Mode
+	TA1CTL = TASSEL_1 + MC_1; // + TAIE;           // ACLK, UP mode, interrupt
+	TA1CCR0 = kPeriod;
+	TA1CCTL0 |= CCIE;              // enable interrupt
+}
 
 //------------------------------------------------------------------------------
 // Function configures Timer_A for full-duplex UART operation
@@ -662,7 +655,8 @@ void TimerA_UART_tx(unsigned char byte)
 //------------------------------------------------------------------------------
 void TimerA_UART_print(char *string)
 {
-    while (*string) {
+    while (*string)
+    {
         TimerA_UART_tx(*string++);
     }
 }
@@ -722,7 +716,3 @@ __interrupt void Timer_A1_ISR(void)
             break;
     }
 }
-
-
-
-
