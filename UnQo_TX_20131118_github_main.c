@@ -149,7 +149,7 @@ enum{
 
 int unqomode = CTMMODE;         // for mode changer 1=CTM mode 2=OFFSET mode
 
-#define CADENCE_THRESHOLD_COUNT 13
+#define CADENCE_THRESHOLD_PULSE 13
 
 //------------------------------------------------------------------------------
 //  TX: sync+data+sum+CR+LF
