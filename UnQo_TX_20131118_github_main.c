@@ -140,8 +140,8 @@ unsigned int index=0;
 unsigned int count = 0;
 
 unsigned int PulseCount=0;
-unsigned int PulseTicket=0;
-unsigned int PulseTicket_carry=0;
+unsigned int TorqueTicket=0;
+unsigned int TorqueTicket_carry=0;
 
 uint16_t ctf_time_stamp1;
 uint16_t ctf_torque_ticks1;
@@ -436,7 +436,7 @@ void main(void)
     P2IES |= BIT2;                          // H -> L edge
     P2REN |= BIT2;                          // interrupt Resistor Enable
 
-    PulseTicket = 0x00;
+    TorqueTicket = 0x00;
 
     __enable_interrupt();
 
@@ -498,32 +498,33 @@ __interrupt void Port_2(void)
     cap_diff = calc_time_diff(new_cap,old_cap);
     old_cap = new_cap;
 
-    if(PulseCount >= 0xFFFE)
-    {
-        PulseCount = 0xFFFF;
-    }
-    else
-        PulseCount++;                                    //Counter
-
     if(cap_diff >= msecConv(TORQUE_TICKET_MASK_TIME))    /*gap larger than "TORQUE_TICKET_MASK_TIME"msec */
     {
-        if(PulseCount >= CADENCE_THRESHOLD_PULSE)
-        {
-            P1OUT ^= BIT6;                               // LED_ON
-            PulseCount = 0;                              //Counter
-
-            Rotation_event_counter++;
-
-            ctf_torque_ticks1 = PulseTicket;
-            PulseTicket = 0;                             // added for reset
-            ctf_time_stamp1 = (cap_diff / 2);
-            sendPower_CTF1();
-        }
-        else if(PulseCount == 0)
-        {
-            PulseTicket++;
-        }
+        /*細かいパルス束で構成されているトルクチケットの先頭だけカウント*/
+        TorqueTicket++;
+        PulseCount = 1;                                  //Counter Clear
     }
+    else
+    {
+        if(PulseCount >= 0xFFFE)
+            PulseCount = 0xFFFF;                             //Overflow
+        else
+            PulseCount++;                                    //Counter
+    }
+
+    if(PulseCount >= CADENCE_THRESHOLD_PULSE)
+    {
+        /*細かいパルス束がCADENCE_THRESHOLD_PULSE本以上あれば、ケイデンス*/
+        P1OUT ^= BIT6;                                   // LED_ON
+
+        Rotation_event_counter++;
+
+        ctf_torque_ticks1 = TorqueTicket;
+        TorqueTicket = 0;                                // added for reset
+        ctf_time_stamp1 = (cap_diff / 2);
+        sendPower_CTF1();
+    }
+
 }
 
 
