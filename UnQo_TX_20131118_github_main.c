@@ -472,6 +472,9 @@ void main(void)
 #pragma vector=PORT1_VECTOR
 __interrupt void Port_1(void)
 {
+    if(P1IFG != BIT3)                                    // interrupt flag check
+        return;                                          // not BIT3 when return
+
     P1OUT ^= BIT0;   // LED Toggle P1.0 using exclusive-OR
     P1IFG &= ~BIT3;   // clear flag
 
@@ -492,13 +495,16 @@ __interrupt void Port_1(void)
 #pragma vector=PORT2_VECTOR
 __interrupt void Port_2(void)
 {
-    P2IFG &= ~BIT2;   // clear flag
+    if(P2IFG != BIT2)                                    // interrupt flag check
+        return;                                          // not BIT2 when return
+
+    P2IFG &= ~BIT2;                                      // clear flag
 
     new_cap = TA1CCR0;                                   // TIMER_A0->TIMER1_A0, TACCR0->TA1CCR0
     cap_diff = calc_time_diff(new_cap,old_cap);
     old_cap = new_cap;
 
-    if(cap_diff >= msecConv(TORQUE_TICKET_MASK_TIME))    /*gap larger than "TORQUE_TICKET_MASK_TIME"msec */
+    if(cap_diff >= msecConv(TORQUE_TICKET_MASK_TIME))    //gap larger than "TORQUE_TICKET_MASK_TIME"msec
     {
         /*細かいパルス束で構成されているトルクチケットの先頭だけカウント*/
         TorqueTicket++;
@@ -507,9 +513,9 @@ __interrupt void Port_2(void)
     else
     {
         if(PulseCount >= 0xFFFE)
-            PulseCount = 0xFFFF;                             //Overflow
+            PulseCount = 0xFFFF;                         //Overflow
         else
-            PulseCount++;                                    //Counter
+            PulseCount++;                                //Counter
     }
 
     if(PulseCount >= CADENCE_THRESHOLD_PULSE)
