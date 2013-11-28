@@ -148,8 +148,8 @@ uint16_t ctf_torque_ticks1;
 uint8_t Rotation_event_counter;
 
 enum{
-	CTMMODE = 1,
-	OFFSETMODE
+    CTMMODE = 1,
+    OFFSETMODE
 };
 
 int unqomode = CTMMODE;         // for mode changer 1=CTM mode 2=OFFSET mode
@@ -197,8 +197,8 @@ void reset()
 {
     uchar setup[2];
 
-    setup[0] = 0x4a; // ID Byte
-    setup[1] = 0x00; // Data Byte N (N=LENGTH)
+    setup[0] = 0x4a;         // ID Byte
+    setup[1] = 0x00;         // Data Byte N (N=LENGTH)
     txMessage(setup, 2);
 }
 
@@ -208,8 +208,8 @@ void ANTAP1_AssignNetwork()
     uchar setup[10];
 
     setup[0] = MESG_NETWORK_KEY_ID;
-    setup[1] = ANT_CH_ID; // chan
-    setup[2] = 0x00; //NETWORK_KEY_ID
+    setup[1] = ANT_CH_ID;    // chan
+    setup[2] = 0x00;         //NETWORK_KEY_ID
     setup[3] = 0x00;
     setup[4] = 0x00;
     setup[5] = 0x00;
@@ -242,7 +242,7 @@ void setrf()
     //setup[1] = (ANT_CH_FREQ & 0xFF00) >> 8;
     //setup[2] = (ANT_CH_FREQ & 0xFF);    // RF Frequency
     setup[1] = ANT_CH_ID;    // Channel ID
-    setup[2] = 0x39;    // RF Frequency
+    setup[2] = 0x39;         // RF Frequency
     txMessage(setup, 3);
 }
 
@@ -328,16 +328,16 @@ void sendPower_SCT(uchar num)
 {
     uchar setup[10];
 
-    setup[0] = 0x4e;									//broadcast data
-    setup[1] = ANT_CH_ID;								// 0x41;     //
-    setup[2] = 0x12;									// 0x12 Data Page Number Standard Crank Torque
-    setup[3] = num;										//Event Count max 256
-    setup[4] = num;										// Crank Revolutions
-    setup[5] = 0xFF;									//Crank cadence  if available 0x5A=90 Otherwise: 0xFF
-    setup[6] =  (0xFF & (crank_period * num ));			//Accumulated crank period LSB
-    setup[7] = ((0xFF00 & (crank_period * num)) >>8);	//Accumulated crank period MSB
-    setup[8] = (0xFF & crank_torque* num);				//Accumulated torque LSB
-    setup[9] = ((0xFF00 & crank_torque* num) >>8);		//Accumulated torque MSB
+    setup[0] = 0x4e;                                    //broadcast data
+    setup[1] = ANT_CH_ID;                                // 0x41;     //
+    setup[2] = 0x12;                                    // 0x12 Data Page Number Standard Crank Torque
+    setup[3] = num;                                        //Event Count max 256
+    setup[4] = num;                                        // Crank Revolutions
+    setup[5] = 0xFF;                                    //Crank cadence  if available 0x5A=90 Otherwise: 0xFF
+    setup[6] =  (0xFF & (crank_period * num ));            //Accumulated crank period LSB
+    setup[7] = ((0xFF00 & (crank_period * num)) >>8);    //Accumulated crank period MSB
+    setup[8] = (0xFF & crank_torque* num);                //Accumulated torque LSB
+    setup[9] = ((0xFF00 & crank_torque* num) >>8);        //Accumulated torque MSB
     txMessage(setup, 10);
 }
 
@@ -347,16 +347,16 @@ void sendPower_CTF1()
 {
     uchar setup[10];
 
-    setup[0] = 0x4e;									//broadcast data
-    setup[1] = ANT_CH_ID;								// 0x41;     //
-    setup[2] = 0x20;									// 0x20 Data Page Number Crank Torque Frequency
-    setup[3] = Rotation_event_counter;					//Rotation event counter increments with each completed pedal revolution.
-    setup[4] = 0x32;									// Slope MSB 1/10 Nm/Hz
-    setup[5] = 0x32;									// Slope LSB 1/10 Nm/Hz
+    setup[0] = 0x4e;                                    //broadcast data
+    setup[1] = ANT_CH_ID;                                // 0x41;     //
+    setup[2] = 0x20;                                    // 0x20 Data Page Number Crank Torque Frequency
+    setup[3] = Rotation_event_counter;                    //Rotation event counter increments with each completed pedal revolution.
+    setup[4] = 0x32;                                    // Slope MSB 1/10 Nm/Hz
+    setup[5] = 0x32;                                    // Slope LSB 1/10 Nm/Hz
     setup[6] = ((0xFF00 & (ctf_time_stamp1)) >>8);      //Accumulated Time Stamp MSB 1/2000s
-    setup[7] =  (0x00FF & (ctf_time_stamp1));			//Accumulated Time Stamp LSB 1/2000s
-    setup[8] = ((0xFF00 & ctf_torque_ticks1) >>8);		//Accumulated Torque Ticks Stamp MSB
-    setup[9] =  (0x00FF & ctf_torque_ticks1);			//Accumulated Torque Ticks Stamp LSB
+    setup[7] =  (0x00FF & (ctf_time_stamp1));            //Accumulated Time Stamp LSB 1/2000s
+    setup[8] = ((0xFF00 & ctf_torque_ticks1) >>8);        //Accumulated Torque Ticks Stamp MSB
+    setup[9] =  (0x00FF & ctf_torque_ticks1);            //Accumulated Torque Ticks Stamp LSB
     txMessage(setup, 10);
 
     if(Rotation_event_counter >= 0xFF)
@@ -385,10 +385,10 @@ void sendPower_CTF1_CAL()
 
 unsigned int calc_time_diff(int end_t,int start_t)
 {
-	if(end_t >= start_t)
-		return((unsigned int)(end_t - start_t));
-	else
-		return((unsigned int)((0xffff - start_t) + 1 + end_t));
+    if(end_t >= start_t)
+        return((unsigned int)(end_t - start_t));
+    else
+        return((unsigned int)((0xffff - start_t) + 1 + end_t));
 }
 
 
@@ -475,15 +475,15 @@ __interrupt void Port_1(void)
     P1OUT ^= BIT0;   // LED Toggle P1.0 using exclusive-OR
     P1IFG &= ~BIT3;   // clear flag
 
-	/*need chattering timer?*/
+    /*need chattering timer?*/
     if(unqomode >= OFFSETMODE)
     {
-		Timer1_A_period_init();
-		unqomode = CTMMODE;
+        Timer1_A_period_init();
+        unqomode = CTMMODE;
     }
     else
     {
-		Timer1_A_period_CAL_init();
+        Timer1_A_period_CAL_init();
         unqomode = OFFSETMODE;
     }
 }
@@ -492,38 +492,38 @@ __interrupt void Port_1(void)
 #pragma vector=PORT2_VECTOR
 __interrupt void Port_2(void)
 {
-	P2IFG &= ~BIT2;   // clear flag
+    P2IFG &= ~BIT2;   // clear flag
 
     new_cap = TA1CCR0;                     // TIMER_A0->TIMER1_A0, TACCR0->TA1CCR0
     cap_diff = calc_time_diff(new_cap,old_cap);
     old_cap = new_cap;
 
-	if(PulseCount >= 0xFFFE)
-	{
-		PulseCount = 0xFFFF;
-	}
-	else
-		PulseCount++;                          //Counter
-
-    if(cap_diff >= msecConv(TORQUE_TICKET_MASK_TIME))	/*gap larger than "TORQUE_TICKET_MASK_TIME"msec */
+    if(PulseCount >= 0xFFFE)
     {
-	    if(PulseTicket >= CADENCE_THRESHOLD_PULSE)
-	    {
-	        P1OUT ^= BIT6;                         // LED_ON
+        PulseCount = 0xFFFF;
+    }
+    else
+        PulseCount++;                          //Counter
+
+    if(cap_diff >= msecConv(TORQUE_TICKET_MASK_TIME))    /*gap larger than "TORQUE_TICKET_MASK_TIME"msec */
+    {
+        if(PulseTicket >= CADENCE_THRESHOLD_PULSE)
+        {
+            P1OUT ^= BIT6;                         // LED_ON
             PulseCount = 0;                        //Counter
 
-	        Rotation_event_counter++;
+            Rotation_event_counter++;
 
-	        ctf_torque_ticks1 = PulseTicket;
-	        PulseTicket = 0;					   // added for reset
-	        ctf_time_stamp1 = (cap_diff / 2);
-	        sendPower_CTF1();
-	    }
-	    else if(PulseCount == 0)
-	    {
-	        PulseTicket++;
-		}
-	}
+            ctf_torque_ticks1 = PulseTicket;
+            PulseTicket = 0;                       // added for reset
+            ctf_time_stamp1 = (cap_diff / 2);
+            sendPower_CTF1();
+        }
+        else if(PulseCount == 0)
+        {
+            PulseTicket++;
+        }
+    }
 }
 
 
@@ -547,10 +547,10 @@ __interrupt void TIMER1_A0(void)
 //------------------------------------------------------------------------------
 void Timer1_A_period_init(void)
 {
-//	TA1CCTL0 = CM_1 + SCS + CCIS_0 + CAP + CCIE;    // Rising edge + Timer1_A3.CCI0A (P2.0)
+//    TA1CCTL0 = CM_1 + SCS + CCIS_0 + CAP + CCIE;    // Rising edge + Timer1_A3.CCI0A (P2.0)
 //                                                  // + Capture Mode + Interrupt
 
-	TA1CTL = TASSEL_1 + MC_2;                       // ACLK, Continus up mode
+    TA1CTL = TASSEL_1 + MC_2;                       // ACLK, Continus up mode
  }
 
 
@@ -559,12 +559,12 @@ void Timer1_A_period_init(void)
  //------------------------------------------------------------------------------
 void Timer1_A_period_CAL_init(void)
 {
-//	TA1CCTL0 = CM_1 + SCS + CCIS_0 + CAP + CCIE;    // Rising edge + Timer1_A3.CCI0A (P2.0)
+//    TA1CCTL0 = CM_1 + SCS + CCIS_0 + CAP + CCIE;    // Rising edge + Timer1_A3.CCI0A (P2.0)
                                                     // + Capture Mode + Interrupt
 
-	TA1CTL = TASSEL_1 + MC_1 + TAIE;                // ACLK, UP mode, interrupt
-	TA1CCR0 = kPeriod;                              // set interrupt cycle
-	TA1CCTL0 |= CCIE;                               // enable interrupt
+    TA1CTL = TASSEL_1 + MC_1 + TAIE;                // ACLK, UP mode, interrupt
+    TA1CCR0 = kPeriod;                              // set interrupt cycle
+    TA1CCTL0 |= CCIE;                               // enable interrupt
 }
 
 //------------------------------------------------------------------------------
