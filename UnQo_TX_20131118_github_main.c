@@ -25,6 +25,12 @@
 //           |   CCI0B/TXD/P1.1|-------->
 //           |                 | 4800 8N1    //9600 8N1
 //           |   CCI0A/RXD/P1.2|<--------
+//           |                 |
+//           |                 |
+//           |             P1.3|<--------    mode input
+//           |             P2.0|<--------    Cadence pulse input
+//           |             P2.2|<--------    Torque pulse input
+//           |                 |
 //
 //
 //  D. Dang
@@ -149,6 +155,7 @@ enum{
 
 int unqomode = CTMMODE;         // for mode changer 1=CTM mode 2=OFFSET mode
 
+#define TORQUE_TICKET_MASK_TIME 2
 #define CADENCE_THRESHOLD_PULSE 13
 
 //------------------------------------------------------------------------------
@@ -200,15 +207,15 @@ void ANTAP1_AssignNetwork()
 
     setup[0] = MESG_NETWORK_KEY_ID;
     setup[1] = ANT_CH_ID; // chan
-    setup[2] = 0xb9; //NETWORK_KEY_ID
-    setup[3] = 0xa5;
-    setup[4] = 0x21;
-    setup[5] = 0xfb;
-    setup[6] = 0xbd;
-    setup[7] = 0x72;
-    setup[8] = 0xc3;
-    setup[9] = 0x45;
-        txMessage(setup, 10);
+    setup[2] = 0x00; //NETWORK_KEY_ID
+    setup[3] = 0x00;
+    setup[4] = 0x00;
+    setup[5] = 0x00;
+    setup[6] = 0x00;
+    setup[7] = 0x00;
+    setup[8] = 0x00;
+    setup[9] = 0x00;
+    txMessage(setup, 10);
 }
 
 
@@ -430,8 +437,7 @@ void main(void)
 
     TimerA_UART_init();                     // Start Timer_A UART
 
-//  Timer1_A_period_init();
-	Timer1_A_period_CAL_init();            // Timer set CAL mode
+    Timer1_A_period_init();
 
 
     //__delay_cycles(5000);                  // Delay between comm cycles
@@ -504,11 +510,16 @@ __interrupt void Port_1(void)
     P1IFG &= ~BIT3;   // clear flag
 
 	/*need chattering timer?*/
-
     if(unqomode >= OFFSETMODE)
+    {
+		Timer1_A_period_init();
 		unqomode = CTMMODE;
+    }
     else
+    {
+		Timer1_A_period_CAL_init();
         unqomode = OFFSETMODE;
+    }
 }
 
 
@@ -528,7 +539,7 @@ __interrupt void Port_2(void)
 	else
 		PulseCount++;                          //Counter
 
-    if(cap_diff >= msecConv(2))	/*gap larger than 2msec */
+    if(cap_diff >= msecConv(TORQUE_TICKET_MASK_TIME))	/*gap larger than 2msec */
     {
 	    if(PulseTicket >= CADENCE_THRESHOLD_PULSE)
 	    {
@@ -551,19 +562,17 @@ __interrupt void Port_2(void)
 
 
 //------------------------------------------------------------------------------
-// Timer_A timer interrupt 4Hz each 250msec
+// Timer1_A timer interrupt 4Hz each 250msec
 //------------------------------------------------------------------------------
 #pragma vector=TIMER1_A0_VECTOR
 __interrupt void TIMER1_A0(void)
 {
-
     if(unqomode == OFFSETMODE)
     {
          P1OUT &= ~BIT6;                        //LED OFF
          sendPower_CTF1_CAL();
          _NOP();                                // SET BREAKPOINT HERE
     }
-
 }
 
 
@@ -572,10 +581,10 @@ __interrupt void TIMER1_A0(void)
 //------------------------------------------------------------------------------
 void Timer1_A_period_init(void)
 {
-	TA1CCTL0 = CM_1 + SCS + CCIS_0 + CAP + CCIE;     // Rising edge + Timer1_A3.CCI0A (P2.0)
-                                                     // + Capture Mode + Interrupt
-//	TACTL = TASSEL_2 + MC_2;                         // SMCLK + Continuous Mode
-	TA1CTL = TASSEL_1 + MC_2;                        // ACLK + Continuous Mode
+//	TA1CCTL0 = CM_1 + SCS + CCIS_0 + CAP + CCIE;    // Rising edge + Timer1_A3.CCI0A (P2.0)
+//                                                  // + Capture Mode + Interrupt
+
+	TA1CTL = TASSEL_1 + MC_2;                       // ACLK, Continus up
  }
 
 
@@ -587,8 +596,6 @@ void Timer1_A_period_CAL_init(void)
 //	TA1CCTL0 = CM_1 + SCS + CCIS_0 + CAP + CCIE;    // Rising edge + Timer1_A3.CCI0A (P2.0)
                                                     // + Capture Mode + Interrupt
 
-//	TACTL = TASSEL_2 + MC_2;                        // SMCLK + Continuous Mode
-//	TA1CTL = TASSEL_1 + MC_2;                       // ACLK + Continuous Mode
 	TA1CTL = TASSEL_1 + MC_1 + TAIE;                // ACLK, UP mode, interrupt
 	TA1CCR0 = kPeriod;                              //set interrupt cycle
 	TA1CCTL0 |= CCIE;                               // enable interrupt
