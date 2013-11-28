@@ -507,7 +507,7 @@ __interrupt void Port_2(void)
 
     if(cap_diff >= msecConv(TORQUE_TICKET_MASK_TIME))    /*gap larger than "TORQUE_TICKET_MASK_TIME"msec */
     {
-        if(PulseTicket >= CADENCE_THRESHOLD_PULSE)
+        if(PulseCount >= CADENCE_THRESHOLD_PULSE)
         {
             P1OUT ^= BIT6;                               // LED_ON
             PulseCount = 0;                              //Counter
