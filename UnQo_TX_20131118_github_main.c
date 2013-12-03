@@ -23,12 +23,12 @@
 //         --|RST          XOUT|-
 //           |                 |
 //           |   CCI0B/TXD/P1.1|-------->
-//           |                 | 4800 8N1    //9600 8N1
+//           |                 |             4800 8N1 or 9600 8N1
 //           |   CCI0A/RXD/P1.2|<--------
 //           |                 |
 //           |             P1.3|<--------    mode input (SW2)
-//           |             P2.0|<--------    Cadence pulse input
-//           |             P2.2|<--------    Torque pulse input
+//           |             P2.0|<--------    Cadence pulse input (not used)
+//           |             P2.2|<--------    Torque pulse (interrupt) input
 //           |                 |
 //
 //
@@ -89,7 +89,6 @@ unsigned int i;
 //------------------------------------------------------------------------------
 void TimerA_UART_init(void);
 void TimerA_UART_tx(unsigned char byte);
-void TimerA_UART_print(char *string);
 
 void Timer1_A_period_CAL_init(void);
 void Timer1_A_period_init(void);
@@ -123,19 +122,20 @@ void Timer1_A_period_init(void);
 #define ctf_torque_ticks 0x0420   //
 
 //#define kPeriod      0x2465 // 32768/37268*4=4Hz -> capture torque tickets
-#define kPeriod      0x1FF6   //0x1FF6 8182/32768=4.004888780Hz
+//#define kPeriod      0x1FF6   //0x1FF6 8182/32768=4.004888780Hz
+//#define kPeriod      0xFFFF // 32768/37268*4=4Hz -> capture torque tickets
+#define kPeriod      0x04FD   //0x1FF6 8182/32768=4.004888780Hz
 
 typedef uint8_t uchar;
-uchar txBuffer[32];
+uchar txBuffer[256];
 uint8_t txBufferSize;
 uint8_t txBufferPos;
 
-unsigned int new_cap=0;
-unsigned int old_cap=0;
-unsigned int cap_diff=0;
+unsigned int new_timer=0;
+unsigned int old_timer=0;
+unsigned int timer_diff=0;
+unsigned int old_transmit_timer=0;            // Last transmit time
 
-unsigned int diff_array[16];                // RAM array for differences
-unsigned int capture_array[16];             // RAM array for captures
 unsigned int index=0;
 unsigned int count = 0;
 
@@ -143,8 +143,11 @@ unsigned int PulseCount=0;
 unsigned int TorqueTicket=0;
 unsigned int TorqueTicket_carry=0;
 
+unsigned int chatter_count13 = 0;
+
 uint16_t ctf_time_stamp1;
 uint16_t ctf_torque_ticks1;
+uint16_t ctf_torque_ticks2;
 uint8_t Rotation_event_counter;
 
 enum{
@@ -152,10 +155,13 @@ enum{
     OFFSETMODE
 };
 
-int unqomode = CTMMODE;         // for mode changer 1=CTM mode 2=OFFSET mode
+//int unqomode = CTMMODE;         // for mode changer 1=CTM mode 2=OFFSET mode
+int unqomode = OFFSETMODE;         // for mode changer 1=CTM mode 2=OFFSET mode
 
 #define TORQUE_TICKET_MASK_TIME 2
 #define CADENCE_THRESHOLD_PULSE 13
+#define CHATTER_THRESHOLD 1
+
 
 //------------------------------------------------------------------------------
 //  TX: sync+data+sum+CR+LF
@@ -163,7 +169,7 @@ int unqomode = CTMMODE;         // for mode changer 1=CTM mode 2=OFFSET mode
 
 void txMessage(uchar* message,uint8_t messageSize)
 {
-    uint8_t i;
+      uint8_t i;
 
     _BIC_SR(GIE);  // disable interrupt
 
@@ -199,7 +205,7 @@ void reset()
 
     setup[0] = 0x4a;                           // ID Byte
     setup[1] = 0x00;                           // Data Byte N (N=LENGTH)
-    txMessage(setup, 2);
+    txMessage(setup, sizeof(setup));
 }
 
 
@@ -217,7 +223,7 @@ void ANTAP1_AssignNetwork()
     setup[7] = 0x00;
     setup[8] = 0x00;
     setup[9] = 0x00;
-        txMessage(setup, 10);
+    txMessage(setup, sizeof(setup));
 }
 
 
@@ -230,7 +236,7 @@ void assignch()
     setup[1] = ANT_CH_ID;                      // Channel ID
     setup[2] = ANT_CH_TYPE;                    // CH Type
     setup[3] = ANT_NET_ID;                     // Network ID
-    txMessage(setup, 4);
+    txMessage(setup, sizeof(setup));
 }
 
 // set RF frequency
@@ -243,7 +249,7 @@ void setrf()
     //setup[2] = (ANT_CH_FREQ & 0xFF);         // RF Frequency
     setup[1] = ANT_CH_ID;                      // Channel ID
     setup[2] = 0x39;                           // RF Frequency
-    txMessage(setup, 3);
+    txMessage(setup, sizeof(setup));
 }
 
 // set channel period
@@ -255,7 +261,7 @@ void setchperiod()
     setup[1] = ANT_CH_ID;
     setup[2] = (ANT_CH_PER & 0xFF);            // Channel Period LSB
     setup[3] = ((ANT_CH_PER & 0xFF00) >> 8);   // Channel Period MSB
-    txMessage(setup, 4);
+    txMessage(setup, sizeof(setup));
 }
 
 // Assigns CH#, Device#=0000, Device Type ID=00, Trans Type=00
@@ -269,7 +275,23 @@ void setchid()
     setup[3] = ANT_DEV_ID2;                    // Device Number MSB
     setup[4] = ANT_DEV_TYPE;                   // Device Type, 0x78 for HRM
     setup[5] = ANT_TX_TYPE;
-    txMessage(setup, 6);
+    txMessage(setup, sizeof(setup));
+}
+
+
+void setInfoData()
+{
+    uchar setup[7];
+
+    setup[0] = 0x51;
+    setup[1] = 0xFF;                    // Channel Number, 0x00 for HRM
+    setup[2] = 0xFF;                    // Device Number LSB
+    setup[3] = 1234;                    // Device Number MSB
+    setup[4] = ANT_DEV_TYPE;            // Device Type, 0x78 for HRM
+    setup[5] = ANT_TX_TYPE;
+    setup[6] = 12;
+    setup[7] = 34;
+    txMessage(setup, sizeof(setup));
 }
 
 /////////////////////////////////////////////////////////////////////////
@@ -301,7 +323,7 @@ void opench()
 
     setup[0] = 0x4b;
     setup[1] = ANT_CH_ID;
-    txMessage(setup, 2);
+    txMessage(setup, sizeof(setup));
 }
 
 
@@ -320,7 +342,7 @@ void sendPower_n(uchar num)
     setup[7] = ((0xFF00 & (Power_data * num)) >>8);     //Accumulated Power MSB
     setup[8] = (0xFF & Power_data);                     //Instantaneous Power LSB
     setup[9] = ((0xFF00 & Power_data) >>8);             //Instantaneous Power MSB
-    txMessage(setup, 10);
+    txMessage(setup, sizeof(setup));
 }
 
 // Sends sendPower_SCT
@@ -338,7 +360,7 @@ void sendPower_SCT(uchar num)
     setup[7] = ((0xFF00 & (crank_period * num)) >>8);   //Accumulated crank period MSB
     setup[8] = (0xFF & crank_torque* num);              //Accumulated torque LSB
     setup[9] = ((0xFF00 & crank_torque* num) >>8);      //Accumulated torque MSB
-    txMessage(setup, 10);
+    txMessage(setup, sizeof(setup));
 }
 
 
@@ -351,13 +373,13 @@ void sendPower_CTF1()
     setup[1] = ANT_CH_ID;                               //0x41
     setup[2] = 0x20;                                    //0x20 Data Page Number Crank Torque Frequency
     setup[3] = Rotation_event_counter;                  //Rotation event counter increments with each completed pedal revolution.
-    setup[4] = 0x32;                                    //Slope MSB 1/10 Nm/Hz
-    setup[5] = 0x32;                                    //Slope LSB 1/10 Nm/Hz
+    setup[4] = 0x01;                                    //Slope MSB 1/10 Nm/Hz
+    setup[5] = 0xF4;                                    //Slope LSB 1/10 Nm/Hz
     setup[6] = ((0xFF00 & (ctf_time_stamp1)) >>8);      //Accumulated Time Stamp MSB 1/2000s
     setup[7] =  (0x00FF & (ctf_time_stamp1));           //Accumulated Time Stamp LSB 1/2000s
     setup[8] = ((0xFF00 & ctf_torque_ticks1) >>8);      //Accumulated Torque Ticks Stamp MSB
     setup[9] =  (0x00FF & ctf_torque_ticks1);           //Accumulated Torque Ticks Stamp LSB
-    txMessage(setup, 10);
+    txMessage(setup, sizeof(setup));
 
     if(Rotation_event_counter >= 0xFF)
         Rotation_event_counter = 0x00;
@@ -377,17 +399,19 @@ void sendPower_CTF1_CAL()
     setup[5] = 0xFF;                                    //Reserved :
     setup[6] = 0xFF;                                    //Reserved :
     setup[7] = 0xFF;                                    //Reserved :
-    setup[8] = ((0xFF00 & ctf_torque_ticks1) >>8);      //Offset MSB
-    setup[9] = ( 0x00FF & ctf_torque_ticks1);           //Offset LSB
-    txMessage(setup, 10);
+    setup[8] = ((0xFF00 & ctf_torque_ticks2) >>8);      //Offset MSB
+    setup[9] = ( 0x00FF & ctf_torque_ticks2);           //Offset LSB
+    txMessage(setup, sizeof(setup));
 }
 
 
-unsigned int calc_time_diff(int end_t,int start_t)
+int calc_time_diff(int end_t,int start_t)
 {
+	/*TAIFGフラグを使ってもいいんだけど…*/
+
     if(end_t >= start_t)
         return((unsigned int)(end_t - start_t));
-    else
+    else	/* if timer return to 0 */
         return((unsigned int)((0xffff - start_t) + 1 + end_t));
 }
 
@@ -397,72 +421,129 @@ unsigned int calc_time_diff(int end_t,int start_t)
 //------------------------------------------------------------------------------
 void main(void)
 {
-
     WDTCTL = WDTPW + WDTHOLD;               // Stop watchdog timer
 
     DCOCTL = 0x00;                          // Set DCOCLK to 1MHz
     BCSCTL1 = CALBC1_1MHZ;
     DCOCTL = CALDCO_1MHZ;
 
-    BCSCTL1 |= DIVA_3;                      // ACLK/8
+    BCSCTL1 |= DIVA_3;                      // ACLK/8   32768/8=4096 0X1000
 
+    // P1.X  setup
     P1OUT = 0x00;                           // Initialize all GPIO
+    P1OUT |= BIT3;                          // P1.3 SW is VDD pulled up
+    P1SEL = 0x00;
+    P1DIR = 0xFF;
 
-    //P1.1-2
     P1SEL = UART_TXD + UART_RXD;            // Timer function for TXD/RXD pins
     P1DIR = 0xFF & ~UART_RXD;               // Set all pins but RXD to output
 
-    //P1.3
-    P1DIR &= ~BIT3;                         // config P1-3 port set to input
-    P1OUT |= BIT3;                          // set to Output
-    P1IE  |= BIT3;                          // enable interrupt
-    P1IES |= BIT3;                          // interrupt edge to H -> L edge
-    P1REN |= BIT3;                          // interrupt Resistor Enable
+// P1.6 LED setup
+    P1DIR |=  BIT6;
 
-    //P1.6
-    P1DIR |=  BIT6;                         // config P1-3 port set to Output
-    P1OUT &= ~BIT6;                         // port OFF
-
-    P2OUT = 0x00;                           // Initialize all GPIO
-
-    //P2.0
-    P2DIR &= ~ BIT0;                        // P2.0 set to TimerA_A3.CCI0A
-    P2SEL |= BIT0;                          // P2.0 Select ACLK function for pin
-
-    //P2.2 pin for pulse ticket capture
-    P2DIR &= ~BIT2;                         // config P2-2 port set to input
-    P2OUT |= BIT2;                          // set to Output
-    P2IE  |= BIT2;                          // enable interrupt
-    P2IES |= BIT2;                          // H -> L edge
-    P2REN |= BIT2;                          // interrupt Resistor Enable
-
-    TorqueTicket = 0x00;
+// 1.0 LED setup
+    P1DIR |=  BIT0;
 
     __enable_interrupt();
-
     TimerA_UART_init();                     // Start Timer_A UART
+
+// ANT chip configuration
+    P1OUT |= BIT0;                         //LED ON P1.0
+
+    reset();
+    P1OUT |= BIT0;
+    __delay_cycles(5000);                  // Delay between comm cycles
+    P1OUT &= ~BIT0;
+    //__delay_cycles(5000);
+
+    ANTAP1_AssignNetwork();
+    P1OUT |= BIT0;
+    __delay_cycles(5000);                  // Delay between comm cycles
+    P1OUT &= ~BIT0;
+    //__delay_cycles(5000);
+
+    assignch();
+    P1OUT |= BIT0;
+    __delay_cycles(5000);                  // Delay between comm cycles
+    P1OUT &= ~BIT0;
+    //__delay_cycles(5000);
+
+    setrf();
+    P1OUT |= BIT0;
+    __delay_cycles(5000);                  // Delay between comm cycles
+    P1OUT &= ~BIT0;
+    //__delay_cycles(5000);
+
+    setchperiod();
+    P1OUT |= BIT0;
+    __delay_cycles(5000);                  // Delay between comm cycles
+    P1OUT &= ~BIT0;
+    //__delay_cycles(5000);
+
+//  setInfoData();
+    setchid();
+    P1OUT |= BIT0;
+    __delay_cycles(5000);                  // Delay between comm cycles
+    P1OUT &= ~BIT0;
+    //__delay_cycles(5000);
+
+//    ChannelPower();
+//    P1OUT |= BIT0;
+//     __delay_cycles(5000);               // Delay between comm cycles
+//     P1OUT &= ~BIT0;
+//     __delay_cycles(5000);
+
+    opench();
+    P1OUT |= BIT0;
+    __delay_cycles(5000);         // Delay between comm cycles
+    P1OUT &= ~BIT0;
+    //__delay_cycles(5000);
+
+    __delay_cycles(250000);       // Delay between comm cycles
+    P1OUT &= ~BIT0;               //LED OFF P1.0
+//    __delay_cycles(250000);     // Delay between comm cycles
+
+    P1DIR &= ~BIT3;               // config P1-3 port set to input
+    P1OUT |= BIT3;                // set to Output
+    P1IES |= BIT3;                // interrupt edge to H -> L edge
+
+
+// 2.2 pin for pulse ticket capture
+    P1OUT |=  BIT0;               //LED ON P1.0
+    P2DIR &= ~BIT2;               // INPUT mode
+    P2REN |= BIT2;                // pull up enable
+    P2OUT |= BIT2;                // pull VDD
+    P2IES |= BIT2;                // H -> L edge
+
+//    __delay_cycles(250000);     // Delay between comm cycles
+    P1OUT &= ~BIT0;               //LED OFF P1.0
+
+// P2.0 set to TimerA_A3.CCI0A : CADENCE capture
+    P2REN |=  BIT0;               // pull up enable
+    P2OUT |=  BIT0;               // pull VDD
+
+    P2DIR &= ~BIT0;               // P2.0 set to TimerA_A3.CCI0A
+    P2SEL |= BIT0;                // P2.0 Select ACLK function for pin
+
+    __delay_cycles(500000);       // Delay between comm cycles
 
     Timer1_A_period_init();
 
-// ANT chip configuration
-    reset();
+    // interrupt enable
+    //P1.3
+    P1IE  |= BIT3;                // enable interrupt
+    P1REN |= BIT3;                // interrupt Resistor Enable
 
-    __delay_cycles(5000);                  // Delay between comm cycles
-    ANTAP1_AssignNetwork();
-    __delay_cycles(5000);                  // Delay between comm cycles
-    assignch();
-    __delay_cycles(5000);                  // Delay between comm cycles
-    setrf();
-    __delay_cycles(5000);                  // Delay between comm cycles
-    setchperiod();
-    __delay_cycles(5000);                  // Delay between comm cycles
-    setchid();
-    __delay_cycles(5000);                  // Delay between comm cycles
+    //P2.2 
+    P2IE  |= BIT2;                // enable interrupt
 
-//  ChannelPower();
-//  __delay_cycles(5000);
+    P1OUT &= ~BIT0;               //LED OFF P1.0
 
-    opench();
+    for (;;)
+    {
+        __low_power_mode_3();
+    }
+
 }
 
 //------------------------------------------------------------------------------
@@ -472,20 +553,21 @@ void main(void)
 #pragma vector=PORT1_VECTOR
 __interrupt void Port_1(void)
 {
-    if(P1IFG != BIT3)                                    // interrupt flag check
+    if(0 == (P1IFG & BIT3))                              // interrupt flag check
         return;                                          // not BIT3 when return
 
-    P1OUT ^= BIT0;   // LED Toggle P1.0 using exclusive-OR
     P1IFG &= ~BIT3;   // clear flag
 
     /*need chattering timer?*/
-    if(unqomode >= OFFSETMODE)
+    if(unqomode == OFFSETMODE)
     {
+        P1OUT &= ~BIT0;                                  // LED_OFF
         Timer1_A_period_init();
         unqomode = CTMMODE;
     }
     else
     {
+        P1OUT ^= BIT0;                                   // LED_ON
         Timer1_A_period_CAL_init();
         unqomode = OFFSETMODE;
     }
@@ -495,16 +577,17 @@ __interrupt void Port_1(void)
 #pragma vector=PORT2_VECTOR
 __interrupt void Port_2(void)
 {
-    if(P2IFG != BIT2)                                    // interrupt flag check
+    if(0 == (P2IFG & BIT2))                              // interrupt flag check
         return;                                          // not BIT2 when return
 
     P2IFG &= ~BIT2;                                      // clear flag
 
-    new_cap = TA1CCR0;                                   // TIMER_A0->TIMER1_A0, TACCR0->TA1CCR0
-    cap_diff = calc_time_diff(new_cap,old_cap);
-    old_cap = new_cap;
+    new_timer = TA1CCR0;                                 // TIMER_A0->TIMER1_A0, TACCR0->TA1CCR0
 
-    if(cap_diff >= msecConv(TORQUE_TICKET_MASK_TIME))    //gap larger than "TORQUE_TICKET_MASK_TIME"msec
+    timer_diff = calc_time_diff(new_timer,old_timer);
+    old_timer = new_timer;
+
+    if(timer_diff > msecConv(TORQUE_TICKET_MASK_TIME))   //gap larger than "TORQUE_TICKET_MASK_TIME"msec
     {
         /*細かいパルス束で構成されているトルクチケットの先頭だけカウント*/
         TorqueTicket++;
@@ -527,10 +610,13 @@ __interrupt void Port_2(void)
 
         ctf_torque_ticks1 = TorqueTicket;
         TorqueTicket = 0;                                // added for reset
-        ctf_time_stamp1 = (cap_diff / 2);
+
+        ctf_time_stamp1 = (uint16_t)((calc_time_diff(new_timer,old_transmit_timer)) / 2);
+
+        old_transmit_timer = new_timer;
+
         sendPower_CTF1();
     }
-
 }
 
 
@@ -540,11 +626,35 @@ __interrupt void Port_2(void)
 #pragma vector=TIMER1_A0_VECTOR
 __interrupt void TIMER1_A0(void)
 {
+    if(0 == (TACTL & TAIFG))                              // interrupt flag check
+        return;
+
+    TACTL &= ~TAIFG;
+
     if(unqomode == OFFSETMODE)
     {
-         P1OUT &= ~BIT6;                        //LED OFF
-         sendPower_CTF1_CAL();
-         _NOP();                                // SET BREAKPOINT HERE
+      if(chatter_count13 == 0)
+      {
+          chatter_count13 = 1;
+          P1OUT ^= BIT6;                                   // LED_ON
+      }
+      else
+      {
+          chatter_count13 = 0;
+          P1OUT &= ~BIT6;                                   // LED_OFF
+      }
+
+      ctf_torque_ticks2 = TorqueTicket;
+      sendPower_CTF1_CAL();
+
+//        /*for test*/
+//        Rotation_event_counter++;
+//
+//        ctf_torque_ticks1 = 1234;
+//        ctf_time_stamp1 = (uint16_t)(500 / 2);
+//
+//        sendPower_CTF1();
+
     }
 }
 
@@ -556,9 +666,11 @@ void Timer1_A_period_init(void)
 {
 //    TA1CCTL0 = CM_1 + SCS + CCIS_0 + CAP + CCIE;  // Rising edge + Timer1_A3.CCI0A (P2.0)
 //                                                  // + Capture Mode + Interrupt
-
+    TA1CCTL0 = 0;
+    TA1CCTL1 = 0;
+    TA1CCTL2 = 0;
     TA1CTL = TASSEL_1 + MC_2;                       // ACLK, Continus up mode
- }
+}
 
 
  //------------------------------------------------------------------------------
@@ -569,9 +681,16 @@ void Timer1_A_period_CAL_init(void)
 //    TA1CCTL0 = CM_1 + SCS + CCIS_0 + CAP + CCIE;  // Rising edge + Timer1_A3.CCI0A (P2.0)
                                                     // + Capture Mode + Interrupt
 
-    TA1CTL = TASSEL_1 + MC_1 + TAIE;                // ACLK, UP mode, interrupt
     TA1CCR0 = kPeriod;                              // set interrupt cycle
-    TA1CCTL0 |= CCIE;                               // enable interrupt
+    TA1CCTL0 = CCIE + OUTMOD_3;                     // enable interrupt + PWM toggle/reset
+    TA1CCTL1 = 0;
+    TA1CCTL2 = 0;
+
+    TA1CTL = TASSEL_1 + MC_1;                       // ACLK, UP to CCR0
+
+//  TA1CCTL0 = SCS + CCIS_0 + CAP + CCIE;  //Timer1_A3.CCI0A (P2.0)
+                                                    // + Capture Mode + Interrupt
+
 }
 
 //------------------------------------------------------------------------------
@@ -596,17 +715,6 @@ void TimerA_UART_tx(unsigned char byte)
     txData = byte;                          // Load global variable
     txData |= 0x100;                        // Add mark stop bit to TXData
     txData <<= 1;                           // Add space start bit
-}
-
-//------------------------------------------------------------------------------
-// Prints a string over using the Timer_A UART
-//------------------------------------------------------------------------------
-void TimerA_UART_print(char *string)
-{
-    while (*string)
-    {
-        TimerA_UART_tx(*string++);
-    }
 }
 
 //------------------------------------------------------------------------------
